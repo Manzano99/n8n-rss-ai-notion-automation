@@ -1,0 +1,446 @@
+{
+  "name": "Biblioteca de artículos",
+  "nodes": [
+    {
+      "parameters": {
+        "modelName": "models/gemini-2.0-flash",
+        "options": {
+          "maxOutputTokens": 300,
+          "temperature": 0.3
+        }
+      },
+      "id": "001e9df7-ee40-443d-81ab-eed3eb507dfb",
+      "name": "Google Gemini",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        256,
+        48
+      ],
+      "credentials": {
+        "googlePalmApi": {
+          "id": "APscqILEfHE0cB7d",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Analiza el siguiente artículo técnico y responde ÚNICAMENTE con un objeto JSON válido, sin texto adicional, sin markdown, sin bloques de código.\n\nTÍTULO: {{ $json.title }}\nCONTENIDO: {{ $json.content }}\n\nEl JSON debe tener exactamente esta estructura:\n{\n  \"resumen\": \"Una síntesis de 2-3 frases en español explicando el contenido técnico del artículo\",\n  \"keywords\": [\"keyword1\", \"keyword2\", \"keyword3\"]\n}\n\nLas keywords deben ser términos técnicos relevantes (3-5 términos). Responde solo el JSON, nada más.",
+        "options": {}
+      },
+      "id": "f9a29620-725b-4cec-b694-513ab0a20e74",
+      "name": "AI Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [
+        176,
+        -208
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// 1. Obtenemos el PRIMER resultado\nconst aiResponse = $input.first().json.output || $input.first().json.text; \n\n// 2. Limpieza\nlet cleanResponse = aiResponse.trim();\nif (cleanResponse.startsWith('```json')) {\n  cleanResponse = cleanResponse.replace(/```json\\n?/g, '').replace(/```\\n?$/g, '');\n} else if (cleanResponse.startsWith('```')) {\n  cleanResponse = cleanResponse.replace(/```\\n?/g, '');\n}\n\n// 3. Parsear\nlet parsedData;\ntry {\n    parsedData = JSON.parse(cleanResponse);\n} catch (e) {\n    parsedData = { resumen: \"Error al parsear IA\", keywords: [] };\n}\n\n// 4. Datos RSS\nconst rssData = $('Unifier').first().json;\n\n// --- 5. CORRECCIÓN: Array -> String separado por comas ---\n// Usamos .join(',') para convertir ['IA', 'Python'] en \"IA,Python\"\n// Esto suele forzar a Notion a crear las etiquetas.\nconst keywordsList = parsedData.keywords || [];\nconst keywordsString = Array.isArray(keywordsList) ? keywordsList.join(',') : keywordsList;\n\n// 6. Retorno\nreturn [\n  {\n    json: {\n      titulo: rssData.title,\n      url: rssData.link,\n      resumen: parsedData.resumen,\n      keywords: keywordsString, // Enviamos \"Keyword1,Keyword2\"\n      fuente: rssData.creator || rssData['dc:creator'] || 'Fuente Desconocida',\n      fechaOriginal: rssData.pubDate || rssData.isoDate || new Date().toISOString()\n    }\n  }\n];"
+      },
+      "id": "d452276f-75a0-44ec-8f9a-d7d188a98f6f",
+      "name": "Procesar Datos",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        496,
+        -112
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "databasePage",
+        "databaseId": {
+          "__rl": true,
+          "value": "2ad7668e-0592-8035-93e6-ced90a1d1f3e",
+          "mode": "list",
+          "cachedResultName": "Biblioteca de artículos",
+          "cachedResultUrl": "https://www.notion.so/2ad7668e0592803593e6ced90a1d1f3e"
+        },
+        "title": "={{ $json.titulo }}",
+        "propertiesUi": {
+          "propertyValues": [
+            {
+              "key": "Título|title",
+              "title": "={{ $json.titulo }}"
+            },
+            {
+              "key": "URL|url",
+              "urlValue": "={{ $json.url }}"
+            },
+            {
+              "key": "Resumen|rich_text",
+              "textContent": "={{ $json.resumen }}"
+            },
+            {
+              "key": "KeyWords|multi_select",
+              "multiSelectValue": "={{ $json.keywords }}"
+            },
+            {
+              "key": "Fuente|rich_text",
+              "textContent": "={{ $json.fuente }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "c9d05abd-550c-4b1a-8a2a-6c26ee45a183",
+      "name": "Notion",
+      "type": "n8n-nodes-base.notion",
+      "typeVersion": 2.2,
+      "position": [
+        720,
+        -112
+      ],
+      "credentials": {
+        "notionApi": {
+          "id": "g1kigStvGyuCHuBK",
+          "name": "Notion account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "hour": 12
+            }
+          ]
+        },
+        "feedUrl": "https://stackoverflow.blog/feed/"
+      },
+      "type": "n8n-nodes-base.rssFeedReadTrigger",
+      "typeVersion": 1,
+      "position": [
+        -672,
+        -448
+      ],
+      "id": "0ff80947-fe9d-42ec-acd1-da473cf40543",
+      "name": "RSS Feed Trigger"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.limit",
+      "typeVersion": 1,
+      "position": [
+        -448,
+        -448
+      ],
+      "id": "aaac5e89-daae-48d0-b5c2-1929ab0081f6",
+      "name": "Limit"
+    },
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "hour": 12
+            }
+          ]
+        },
+        "feedUrl": "https://dev.to/feed"
+      },
+      "type": "n8n-nodes-base.rssFeedReadTrigger",
+      "typeVersion": 1,
+      "position": [
+        -672,
+        -272
+      ],
+      "id": "64978bb0-21f8-420c-a6ce-cfd7467f9c93",
+      "name": "RSS Feed Trigger1"
+    },
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "hour": 12
+            }
+          ]
+        },
+        "feedUrl": "https://lobste.rs/rss"
+      },
+      "type": "n8n-nodes-base.rssFeedReadTrigger",
+      "typeVersion": 1,
+      "position": [
+        -672,
+        -112
+      ],
+      "id": "8edb4066-f074-4e8d-b05d-8ed3257d55d6",
+      "name": "RSS Feed Trigger2"
+    },
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "hour": 12
+            }
+          ]
+        },
+        "feedUrl": "https://martinfowler.com/feed.atom"
+      },
+      "type": "n8n-nodes-base.rssFeedReadTrigger",
+      "typeVersion": 1,
+      "position": [
+        -672,
+        48
+      ],
+      "id": "273b8db2-2508-467f-8cc1-7110f8227475",
+      "name": "RSS Feed Trigger3"
+    },
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "hour": 12
+            }
+          ]
+        },
+        "feedUrl": "https://www.freecodecamp.org/news/rss/"
+      },
+      "type": "n8n-nodes-base.rssFeedReadTrigger",
+      "typeVersion": 1,
+      "position": [
+        -672,
+        224
+      ],
+      "id": "af3b4de9-6b16-45cb-b3e9-a9a836d52513",
+      "name": "RSS Feed Trigger4"
+    },
+    {
+      "parameters": {
+        "numberInputs": 5
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -32,
+        -160
+      ],
+      "id": "659eabb1-3d54-4e71-b14d-5f14cde1b3a1",
+      "name": "Unifier"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.limit",
+      "typeVersion": 1,
+      "position": [
+        -448,
+        -272
+      ],
+      "id": "fba547e1-7687-4c7b-8163-de4735bc5c2e",
+      "name": "Limit1"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.limit",
+      "typeVersion": 1,
+      "position": [
+        -448,
+        -112
+      ],
+      "id": "18fa0a7f-02d8-4ebe-864b-c4fb86ce0981",
+      "name": "Limit2"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.limit",
+      "typeVersion": 1,
+      "position": [
+        -448,
+        48
+      ],
+      "id": "25658a74-d95b-4147-ad0a-3533128e4606",
+      "name": "Limit3"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.limit",
+      "typeVersion": 1,
+      "position": [
+        -448,
+        224
+      ],
+      "id": "6293a605-6616-44d4-b2e3-74d360f47af0",
+      "name": "Limit4"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Procesar Datos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Procesar Datos": {
+      "main": [
+        [
+          {
+            "node": "Notion",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "RSS Feed Trigger": {
+      "main": [
+        [
+          {
+            "node": "Limit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Limit": {
+      "main": [
+        [
+          {
+            "node": "Unifier",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "RSS Feed Trigger1": {
+      "main": [
+        [
+          {
+            "node": "Limit1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "RSS Feed Trigger2": {
+      "main": [
+        [
+          {
+            "node": "Limit2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "RSS Feed Trigger3": {
+      "main": [
+        [
+          {
+            "node": "Limit3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "RSS Feed Trigger4": {
+      "main": [
+        [
+          {
+            "node": "Limit4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Unifier": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Limit1": {
+      "main": [
+        [
+          {
+            "node": "Unifier",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Limit2": {
+      "main": [
+        [
+          {
+            "node": "Unifier",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Limit3": {
+      "main": [
+        [
+          {
+            "node": "Unifier",
+            "type": "main",
+            "index": 3
+          }
+        ]
+      ]
+    },
+    "Limit4": {
+      "main": [
+        [
+          {
+            "node": "Unifier",
+            "type": "main",
+            "index": 4
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "versionId": "063c54d0-383f-41af-b6af-527de3bacde8",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "0a2e4d56e671653b430a904d631b7934c02e4da9dc811c9a45d223901cc05d1a"
+  },
+  "id": "OUNUhYqC7WKlATsf",
+  "tags": []
+}
